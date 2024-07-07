@@ -10,8 +10,6 @@ long unsigned int FrontBuss = 0x001;
 int CanFrame = 0;
 int DataLength = 8;
 byte BussMessage[8] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-//   ReturnMessage[8] = {FromAddress,0=Off,1=On}
-//   ReturnMessage[8] = {FromAddress,brake,reverse,Lturn,Rturn,Hazard,FREE,FREE}
 byte ReturnMessage[8] = {0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 long unsigned int ReturnAddr =  0x000;
 
