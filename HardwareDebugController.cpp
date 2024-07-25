@@ -59,6 +59,7 @@ void loop()
   }
  Serial.println("Front All Off Response Received");
  CAN0.readMsgBuf(&MessageAddr,&Messagelen,BussMessage);
+
  Serial.println("Send Command Rear All On");
  while(digitalRead(CAN0_INT) != LOW)
  {
