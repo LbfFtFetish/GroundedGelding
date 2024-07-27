@@ -15,13 +15,13 @@ LiquidCrystal_I2C lcd(0x27,20,4);
 MCP_CAN CAN0(10);
 long unsigned int MessageAddr =  0x000;
 unsigned char Messagelen = 0;
-long unsigned int RearBuss = 0x002;
+long unsigned int RearReceiverAddress = 0x003;
+long unsigned int ControllerAddress = 0x001;
 int CanFrame = 0;
 int DataLength = 8;
-byte BussMessage[8] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-byte ReturnMessage[8] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+byte MessageOnBuss[8] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+byte ControlerBussMessage[8] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 char MessageExt[40];
-long unsigned int ReturnAddr =  0x000;
 
 // Common Setup
 char LineNumberString[20];
@@ -40,6 +40,8 @@ void ParseInAddrLine();
 void ParseOutMsgLine();
 void UpdateExternals();
 void ConfirmTxn();
+void InHang();
+void OutHang();
 
 void setup()
 {
@@ -47,26 +49,26 @@ void setup()
  lcd.backlight();
  lcd.setCursor(0,0);
  lcd.print("LCD setup complete!");
- delay(1000);
+ OutHang();
  lcd.setCursor(0,1);
  lcd.print("Init CAN 20k at 8Hz");
- delay(1000);
+ OutHang();
  while(CAN0.begin(MCP_ANY, CAN_20KBPS, MCP_8MHZ) != CAN_OK)
   {
    lcd.setCursor(0,0);
    lcd.print("MCP2515 Init Error.");
    lcd.setCursor(0,1);
    lcd.print("                   ");
-   delay(5000);
+   OutHang();
   } 
  lcd.setCursor(0,2);
  lcd.print("MCP2515 Init OK.   ");
  CAN0.setMode(MCP_NORMAL);
  pinMode(CAN0_INT,INPUT);   
- delay(1000);
+ OutHang();
  lcd.setCursor(0,3);
  lcd.print("Welcome aboard!    ");
- delay(2000);
+ OutHang();
  ClearScreen();
  DrawMenu();
 }
@@ -76,7 +78,7 @@ void loop()
  GetASample();
  DrawData();
  ConfirmTxn();
- delay(2000);
+ InHang();
 }
 
 void ClearScreen()
@@ -99,7 +101,7 @@ void DrawMenu()
  lcd.print("In Msg:");
  lcd.setCursor(0,2);
  lcd.print("Out Adr:");
- sprintf(OutMessageAddrExt,"%lu",ReturnAddr);
+ sprintf(OutMessageAddrExt,"%lu",ControllerAddress);
  lcd.print(OutMessageAddrExt);
  lcd.setCursor(0,3);
  lcd.print("Out Msg:");
@@ -123,9 +125,9 @@ void GetASample()
   if(!digitalRead(CAN0_INT))
  {
    Serial.println("Found Pending Txn");
-   CAN0.readMsgBuf(&MessageAddr,&Messagelen,BussMessage);
+   CAN0.readMsgBuf(&MessageAddr,&Messagelen,MessageOnBuss);
  }
- if(MessageAddr==RearBuss)
+ if(MessageAddr==RearReceiverAddress)
  {
    ParseInAddrLine();
    ParseInMsgLine();
@@ -136,13 +138,11 @@ void GetASample()
 void ParseInMsgLine()
 {
   int FilledCells=0;
-  char LineDataPoint[13];
-  char InLineData[13];
-  while(FilledCells<13)
+  const int ScreenCells=13;
+  for(FilledCells=0;FilledCells>ScreenCells;FilledCells++)
   {
-   FilledCells++;
-   sprintf(LineDataPoint,"%u",BussMessage[FilledCells]);
-   strcat(InLineData,LineDataPoint);
+    sprintf(LineDataPoint,"%u",MessageOnBuss[FilledCells]);
+    strcat(InLineData,LineDataPoint);
   }
 }
 
@@ -154,22 +154,30 @@ void ParseInAddrLine()
 void ParseOutMsgLine()
 {
   int FilledCells=0;
-  char LineDataPoint[13];
-  char OutLineData[13];
-  while(FilledCells<13)
+  const int ScreenCells=13;
+  for(FilledCells=0;FilledCells>ScreenCells;FilledCells++)
   {
-   FilledCells++;
-   sprintf(LineDataPoint,"%u",BussMessage[FilledCells]);
-   strcat(OutLineData,LineDataPoint);
+    sprintf(LineDataPoint,"%u",MessageOnBuss[FilledCells]);
+    strcat(InLineData,LineDataPoint);
   }
 }
 
 void UpdateExternals()
 {
- delay(1000);
+ OutHang();
 }
 
 void  ConfirmTxn()
 {
-  CAN0.sendMsgBuf(ReturnAddr,CanFrame,DataLength,BussMessage);
+  CAN0.sendMsgBuf(ControllerAddress,CanFrame,DataLength,ControlerBussMessage);
+}
+
+void InHang()
+{
+ delay(10);
+}
+
+void OutHang()
+{
+ delay(1000);
 }

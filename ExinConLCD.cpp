@@ -23,27 +23,29 @@ MCP_CAN CAN0(10);
 //Define buss message
 byte FrontBussMessage[8] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 byte RearBussMessage[8] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-byte ReturnBussMessage[8] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+byte MessageOnBuss[8] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 
 //Map out the neighborhood
-long unsigned int FromAddress =  0x000;
+long unsigned int MessageAddress = 0x000;
 long unsigned int ControllerAddress = 0x001;
 long unsigned int FrontReceiverAddress = 0x002;
 long unsigned int RearReceiverAddress = 0x003;
 
 //Define Pin Settings
-int LeftTurnPin = 9;
-int RightTurnPin = 8;
-int BrakePin = 7;
-int ReversePin = 6;
-int HeadLightsPin = 5;
-int HighLightsPin = 4;
-int HornPin = 3;
-int WindShieldWashPin = A0;
-int WindShieldWipePin = A1;
-int HazardPin = A2;
+int InputHighPin=9;
+int LeftTurnPin = 8;
+int RightTurnPin = 7;
+int BrakePin = 6;
+int ReversePin = 5;
+int HeadLightsPin = 4;
+int HighLightsPin = 3;
+int HornPin = A0;
+int WindShieldWashPin = A1;
+int WindShieldWipePin = A2;
+int HazardPin = A3;
 
 //Define Pin Values
+boolean InputeHighVal = HIGH;
 boolean LeftTurnVal = LOW;
 boolean RightTurnVal = LOW;
 boolean BrakeVal = LOW;
@@ -69,7 +71,11 @@ void DrawMenu();
 void DrawData();
 void ParseInMsgLine();
 void ParseInAddrLine();
-void ParseOutMsgLine();
+void ParseRearMsgLine();
+void ParseFrontMsgLine();
+int MaybeReturnMessage();
+void InHang();
+void OutHang();
 
 //On Setup
 void setup()
@@ -78,26 +84,28 @@ void setup()
  lcd.backlight();
  lcd.setCursor(0,0);
  lcd.print("LCD setup complete!");
- delay(1000);
+ OutHang();
  lcd.setCursor(0,1);
  lcd.print("Init CAN 20k at 8Hz");
- delay(1000);
+ OutHang();
  while(CAN0.begin(MCP_ANY, CAN_20KBPS, MCP_8MHZ) != CAN_OK)
   {
    lcd.setCursor(0,0);
    lcd.print("MCP2515 Init Error.");
    lcd.setCursor(0,1);
    lcd.print("                   ");
-   delay(5000);
+   OutHang();
   } 
  lcd.setCursor(0,2);
  lcd.print("MCP2515 Init OK.   ");
+ OutHang();
  CAN0.setMode(MCP_NORMAL);
- pinMode(CAN0_INT,INPUT);   
- delay(1000);
+ pinMode(CAN0_INT,INPUT);
+ pinMode(InputHighPin,OUTPUT),
+ digitalWrite(InputHighPin,HIGH);   
  lcd.setCursor(0,3);
  lcd.print("Welcome aboard!    ");
- delay(2000);
+ OutHang();
  ClearScreen();
  DrawMenu();
 }
@@ -156,13 +164,18 @@ else FrontBussMessage[4] = 0X00;
 //  Flush Any Pending Responce
  if(!digitalRead(CAN0_INT)) 
  {
-   CAN0.readMsgBuf(&ControllerAddress,&Messagelen,ReturnBussMessage);
+   CAN0.readMsgBuf(&MessageAddress,&Messagelen,MessageOnBuss);
   }
+ParseFrontMsgLine();
 //  Send request while no responce 
-while(digitalRead(CAN0_INT) != LOW)
+int GotResponce=0;
+while(GotResponce==0)
  {
    CAN0.sendMsgBuf(FrontReceiverAddress,CanFrame,DataLength,FrontBussMessage);
-   delay(10);
+   InHang();
+   CAN0.readMsgBuf(&MessageAddress,&Messagelen,MessageOnBuss);
+   GotResponce=MaybeReturnMessage();
+   InHang();
   }
 return 0;
 }
@@ -195,13 +208,14 @@ else RearBussMessage[4] = 0X00;
 //  Flush Any Pending Responce
  if(!digitalRead(CAN0_INT)) 
  {
-   CAN0.readMsgBuf(&ControllerAddress,&Messagelen,ReturnBussMessage);
+   CAN0.readMsgBuf(&MessageAddress,&Messagelen,MessageOnBuss);
   }
+ParseRearMsgLine();
 //  Send request while no responce 
 while(digitalRead(CAN0_INT) != LOW)
  {
    CAN0.sendMsgBuf(RearReceiverAddress,CanFrame,DataLength,RearBussMessage);
-   delay(10);
+   InHang();
   }
 return 0;
 }
@@ -226,7 +240,7 @@ void DrawMenu()
  lcd.print("In Msg:");
  lcd.setCursor(0,2);
  lcd.print("OutAdr:");
- sprintf(OutMessageAddrExt,"%u",ControllerAddress);
+ sprintf(OutMessageAddrExt,"%lu",ControllerAddress);
  lcd.print(OutMessageAddrExt);
  lcd.setCursor(0,3);
  lcd.print("OutMsg:");
@@ -247,31 +261,57 @@ void DrawData()
 void ParseInMsgLine()
 {
   int FilledCells=0;
-  char LineDataPoint[13];
-  char InLineData[13];
-  while(FilledCells<13)
+  const int ScreenCells=13;
+  for(FilledCells=0;FilledCells>ScreenCells;FilledCells++)
   {
-   FilledCells++;
-   sprintf(LineDataPoint,"%u",ReturnBussMessage[FilledCells]);
-   strcat(InLineData,LineDataPoint);
+    sprintf(LineDataPoint,"%u",MessageOnBuss[FilledCells]);
+    strcat(InLineData,LineDataPoint);
   }
 }
 
 void ParseInAddrLine()
 {
- sprintf(InMessageAddrExt,"%lu",FromAddress);
+ sprintf(InMessageAddrExt,"%lu",MessageAddress);
 }
 
-void ParseOutMsgLine()
+void ParseFrontMsgLine()
 {
   int FilledCells=0;
-  char LineDataPoint[13];
-  char OutLineData[13];
-  while(FilledCells<13)
+  const int ScreenCells=13;
+  for(FilledCells=0;FilledCells>ScreenCells;FilledCells++)
   {
-   FilledCells++;
-   sprintf(LineDataPoint,"%u",ReturnBussMessage[FilledCells]);
-   strcat(OutLineData,LineDataPoint);
+    sprintf(LineDataPoint,"%u",FrontBussMessage[FilledCells]);
+    strcat(InLineData,LineDataPoint);
   }
 }
 
+void ParseRearMsgLine()
+{
+  int FilledCells=0;
+  const int ScreenCells=13;
+  for(FilledCells=0;FilledCells>ScreenCells;FilledCells++)
+  {
+    sprintf(LineDataPoint,"%u",RearBussMessage[FilledCells]);
+    strcat(InLineData,LineDataPoint);
+  }
+}
+
+int MaybeReturnMessage()
+{
+  int OurMessage=0;
+  if(MessageAddress==ControllerAddress)
+  {
+     OurMessage=1;
+  }
+  return OurMessage;
+}
+
+void InHang()
+{
+ delay(10);
+}
+
+void OutHang()
+{
+ delay(1000);
+}
